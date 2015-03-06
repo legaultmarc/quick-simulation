@@ -3,11 +3,18 @@
 from __future__ import print_function, division
 
 import numpy as np
-from collections import OrderedDict, namedtuple
+from collections import OrderedDict
 
 
 # This can be used when there is an unsimulated variable to add to the model.
-Variable = namedtuple("Variable", ["name", "x"])
+class Variable(object):
+    def __init__(self, name, x, effect):
+        self.name = name
+        self.x = x
+        self.effect = effect
+        self.n = len(self.x)
+    def __repr__(self):
+        return self.name
 
 
 class GeneticVariable(object):
@@ -122,6 +129,8 @@ class Simulation(object):
                     pred1, pred2 = preds
                     y[i] += effect * pred1.x[i] * pred2.x[i]
 
+        y += self.intercept
+
         if self.outcome_type == "discrete":
             # We discretize using the logistic function.
             y = np.round(1 / (1 + np.exp(-y)))
@@ -130,8 +139,6 @@ class Simulation(object):
         else:
             if self.noise > 0:
                 y += np.random.normal(0, self.noise, n)
-            
-            y += self.intercept
 
         return y
 
@@ -148,6 +155,9 @@ class Simulation(object):
 
         fig, axes = plt.subplots(1, len(self.predictors),
                                  figsize=figsize, sharey=True)
+        if type(axes) is not list:
+            axes = [axes]
+
         for i, ax in enumerate(axes):
             if self.outcome_type == "discrete":
                 n = len(self.predictors[i].x)
