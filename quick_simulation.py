@@ -87,12 +87,23 @@ class Simulation(object):
     """
     def __init__(self, predictors, outcome_type="discrete",
                  interactions=None, noise=0, intercept=0):
-        self.model = "y ~ {} + {}".format(
+
+        self.model = "y ~ {}".format(
             " + ".join([repr(e) for e in predictors]),
-            " + ".join(["{} x {}".format(*k) for k in interactions.keys()])
         )
 
+        if interactions:
+            self.model += " + "
+            self.model += " + ".join(
+                ["{} x {}".format(*k) for k in interactions.keys()]
+            )
+
         self.predictors = predictors
+        if outcome_type not in ("discrete", "continuous"):
+            msg = "Invalid outcome_type '{}'. Authorized values are {}"
+            msg = msg.format(outcome_type, ("discrete", "continuous"))
+            raise Exception(msg)
+
         self.outcome_type = outcome_type
         self.intercept = intercept
         self.interactions = interactions
@@ -103,18 +114,24 @@ class Simulation(object):
         assert len(set([e.n for e in self.predictors])) == 1
         n = self.predictors[0].n
         y = np.zeros(n)
-        if self.outcome_type == "continuous":
-            for i in range(len(y)):
-                for pred in self.predictors:
-                    y[i] += pred.effect * pred.x[i]
+        for i in range(len(y)):
+            for pred in self.predictors:
+                y[i] += pred.effect * pred.x[i]
+            if self.interactions:
                 for preds, effect in self.interactions.items():
                     pred1, pred2 = preds
                     y[i] += effect * pred1.x[i] * pred2.x[i]
+
+        if self.outcome_type == "discrete":
+            # We discretize using the logistic function.
+            y = np.round(1 / (1 + np.exp(-y)))
         
-        if self.noise > 0:
-            y += np.random.normal(0, self.noise, n)
-        
-        y += self.intercept
+        # Special parameters for continuous traits.
+        else:
+            if self.noise > 0:
+                y += np.random.normal(0, self.noise, n)
+            
+            y += self.intercept
 
         return y
 
@@ -132,8 +149,15 @@ class Simulation(object):
         fig, axes = plt.subplots(1, len(self.predictors),
                                  figsize=figsize, sharey=True)
         for i, ax in enumerate(axes):
-            ax.scatter(predictors[i].x, self.y)
-            ax.set_xlabel(predictors[i])
+            if self.outcome_type == "discrete":
+                n = len(self.predictors[i].x)
+                ax.scatter(
+                    self.predictors[i].x,
+                    self.y + np.random.normal(0, 0.02, n)
+                )
+            else:
+                ax.scatter(self.predictors[i].x, self.y)
+            ax.set_xlabel(self.predictors[i])
             if i == 0:
                 ax.set_ylabel("Outcome")
     
