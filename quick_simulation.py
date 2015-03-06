@@ -104,6 +104,11 @@ class Simulation(object):
             self.model += " + ".join(
                 ["{} x {}".format(*k) for k in interactions.keys()]
             )
+            for k in interactions.keys():
+                msg = ("Interaction terms need to be included as predictors "
+                       "too.")
+                assert k[0] in predictors and k[1] in predictors, msg
+                        
 
         self.predictors = predictors
         if outcome_type not in ("discrete", "continuous"):
@@ -123,22 +128,29 @@ class Simulation(object):
         y = np.zeros(n)
         for i in range(len(y)):
             for pred in self.predictors:
-                y[i] += pred.effect * pred.x[i]
+                if not np.isnan(pred.x[i]):
+                    y[i] += pred.effect * pred.x[i]
             if self.interactions:
                 for preds, effect in self.interactions.items():
                     pred1, pred2 = preds
-                    y[i] += effect * pred1.x[i] * pred2.x[i]
+                    if not (np.isnan(pred1.x[i]) or np.isnan(pred2.x[i])):
+                        y[i] += effect * pred1.x[i] * pred2.x[i]
 
-        y += self.intercept
+            y[i] += self.intercept
 
-        if self.outcome_type == "discrete":
-            # We discretize using the logistic function.
-            y = np.round(1 / (1 + np.exp(-y)))
-        
+            if self.outcome_type == "discrete":
+                if not np.isnan(y[i]):
+                    # See the following link for a description of what is
+                    # happening here.
+                    # http://stats.stackexchange.com/questions/46523/how-to-simulate-artificial-data-for-logistic-regression/46525#46525
+                    y[i] = np.random.binomial(
+                        1,
+                        1 / (1 + np.exp(-y[i])),
+                    )
+
         # Special parameters for continuous traits.
-        else:
-            if self.noise > 0:
-                y += np.random.normal(0, self.noise, n)
+        if self.noise > 0 and self.outcome_type == "continuous":
+            y += np.random.normal(0, self.noise, n)
 
         return y
 
@@ -155,7 +167,7 @@ class Simulation(object):
 
         fig, axes = plt.subplots(1, len(self.predictors),
                                  figsize=figsize, sharey=True)
-        if type(axes) is not list:
+        if type(axes) is not np.ndarray:
             axes = [axes]
 
         for i, ax in enumerate(axes):
